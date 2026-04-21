@@ -249,3 +249,98 @@ n_params = sum(p.numel() for p in model.parameters())
 print(f"\nModel parameters: {n_params:,}")
 print(model)
 
+# Loss, optimizer, scheduler
+criterion = nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+
+# Reduce LR when validation loss plateaus
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode="min",
+    factor=0.5,
+    patience=3,
+    #verbose=True
+)
+
+best_val_loss = float("inf")
+epochs_no_improve = 0
+train_losses = []
+val_losses = []
+
+print("\nTraining …")
+t0 = time.time()
+
+for epoch in range(1, EPOCHS + 1):
+    # ---- TRAIN ----
+    model.train()
+    train_loss = 0.0
+
+    for Xb, yb in train_loader:
+        Xb = Xb.to(DEVICE)
+        yb = yb.to(DEVICE)
+
+        optimizer.zero_grad()
+        preds = model(Xb)
+        loss = criterion(preds, yb)
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item() * Xb.size(0)
+
+    train_loss /= len(train_loader.dataset)
+
+    # ---- VALIDATION ----
+    model.eval()
+    val_loss = 0.0
+
+    with torch.no_grad():
+        for Xb, yb in val_loader:
+            Xb = Xb.to(DEVICE)
+            yb = yb.to(DEVICE)
+
+            preds = model(Xb)
+            loss = criterion(preds, yb)
+            val_loss += loss.item() * Xb.size(0)
+
+    val_loss /= len(val_loader.dataset)
+
+    train_losses.append(train_loss)
+    val_losses.append(val_loss)
+
+    # Step scheduler
+    scheduler.step(val_loss)
+
+    print(
+        f"Epoch {epoch:03d} | "
+        f"Train Loss: {train_loss:.6f} | "
+        f"Val Loss: {val_loss:.6f} | "
+        f"LR: {optimizer.param_groups[0]['lr']:.2e}"
+    )
+
+    # ---- EARLY STOPPING ----
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        epochs_no_improve = 0
+        torch.save(model.state_dict(), MODEL_PATH)
+    else:
+        epochs_no_improve += 1
+
+    if epochs_no_improve >= PATIENCE:
+        print(f"\nEarly stopping triggered after {epoch} epochs.")
+        break
+
+print(f"Training finished in {(time.time() - t0):.1f}s")
+
+# Load best model
+model.load_state_dict(torch.load(MODEL_PATH))
+
+plt.figure(figsize=(8, 4))
+plt.plot(train_losses, label="Train")
+plt.plot(val_losses, label="Validation")
+plt.xlabel("Epoch")
+plt.ylabel("MSE Loss")
+plt.legend()
+plt.title("Training History")
+plt.tight_layout()
+plt.savefig(os.path.join(OUT_DIR, "training_curve.png"))
+plt.close()

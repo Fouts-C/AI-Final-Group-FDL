@@ -45,9 +45,11 @@ Tasks Completed:
     - Created new repo to seprate the midterm and final material (Carson Fouts)
     - Updated preprocessing to check for any corrupt data (Carson Fouts)
     - Added train/test split for the hurricane damage dataset (Carson Fouts)
+    - Reviewing Runoff data work (Quinn Lautenslager)
 
 Tasks In Progress (4/19/2026 - 4/26/2026):
     - Add training loop with early stopping and LR scheduling (Phase 3) (Josh Dula)
     - Add test-set evaluation with RMSE, MAE, NSE metrics (Phase 4) (Josh Dula)
     - Generate visualizations: loss curves, RMSE by lead time, time series comparison, scatter plots (Josh Dula)
+    - Adding Pytorch CNN for hurricane damage (Carson Fouts)
     - Compare LSTM-corrected forecasts vs raw NWM vs observed USGS

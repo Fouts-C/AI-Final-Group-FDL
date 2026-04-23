@@ -48,8 +48,46 @@ Tasks Completed:
     - Reviewing Runoff data work (Quinn Lautenslager)
 
 Tasks In Progress (4/19/2026 - 4/26/2026):
-    - Add training loop with early stopping and LR scheduling (Phase 3) (Josh Dula)
-    - Add test-set evaluation with RMSE, MAE, NSE metrics (Phase 4) (Josh Dula)
-    - Generate visualizations: loss curves, RMSE by lead time, time series comparison, scatter plots (Josh Dula)
     - Adding Pytorch CNN for hurricane damage (Carson Fouts)
     - Compare LSTM-corrected forecasts vs raw NWM vs observed USGS
+
+Week of 4/20/2026 - 4/26/2026
+Authors:
+    - Josh Dula
+
+Tasks Completed:
+    - Built LSTM training loop in RunoffLSTM.py (Phase 3) (Josh Dula)
+        - Adam optimizer + MSELoss on scaled residuals (Han & Morrison 2022; Kratzert et al. 2018)
+        - ReduceLROnPlateau scheduler (factor=0.5, patience=3) tied to val loss
+        - Gradient clipping (max_norm=1.0) for stacked-LSTM stability (Kratzert et al. 2018 §3.2)
+        - Early stopping (patience=10), best weights saved to lstm_runoff.pt
+        - History dict of train/val loss + LR per epoch
+    - Built test-set evaluation in RunoffLSTM.py (Phase 4) (Josh Dula)
+        - Reload best checkpoint, predict residuals, inverse-transform to cfs
+        - Corrected forecast = raw_nwm - predicted_residual
+        - RMSE, MAE, NSE reported overall, per-station, and per-station × per-lead-time
+        - Metrics written to pics/metrics_overall.csv and pics/metrics_per_lead.csv
+    - Added visualizations (Phase 4) (Josh Dula)
+        - pics/loss_curves.png — train vs val loss
+        - pics/rmse_by_lead.png — RMSE vs lead time per station, corrected vs raw NWM
+        - pics/timeseries.png — peak-flow 14-day window per station, leads {1,6,12,18}h
+        - pics/scatter.png — predicted vs observed, corrected and raw NWM
+    - Trained the model end-to-end on the full dataset (Josh Dula)
+        - 16 epochs before early stopping, best val loss around epoch 6, ~8 min on CPU
+        - Fixed a display bug where lead times were showing up as z-scores instead of 1-18h
+    - Noticed the results looked too good and think there is a data leak (Josh Dula)
+        - RMSE went from 56 cfs down to 1.7 cfs, and corrected error stayed almost flat
+          across all 18 lead times, which shouldn't happen — longer leads should be harder
+        - Looks like `residual` being in the feature list lets the model see the observed
+          streamflow from the hour before the prediction time, even for long-lead forecasts
+          where that observation wouldn't actually be available yet
+        - Deleted the saved model and plots so we don't accidentally use them in the writeup
+
+Tasks In Progress (4/27/2026 - 5/3/2026):
+    - Fix the data leak in RunoffLSTM.py (Josh Dula)
+        - Take `residual` out of the feature list
+        - Make the lookback window respect the actual forecast issue time
+        - Double-check the train/test split while we're in there
+    - Retrain and rebuild the plots after the fix
+    - Write up the results (include what we learned from the leak) (Josh Dula)
+    - Pytorch CNN for hurricane damage (Carson Fouts)

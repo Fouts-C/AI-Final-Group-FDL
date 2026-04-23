@@ -54,6 +54,7 @@ Tasks In Progress (4/19/2026 - 4/26/2026):
 Week of 4/20/2026 - 4/26/2026
 Authors:
     - Josh Dula
+    - Carson Fouts
 
 Tasks Completed:
     - Built LSTM training loop in RunoffLSTM.py (Phase 3) (Josh Dula)
@@ -82,6 +83,10 @@ Tasks Completed:
           streamflow from the hour before the prediction time, even for long-lead forecasts
           where that observation wouldn't actually be available yet
         - Deleted the saved model and plots so we don't accidentally use them in the writeup
+    
+   - Built HurricaneDamageDataset.py: custom PyTorch Dataset loading MASK images with Label_1 as ground truth (Carson Fouts)
+   - Built HurricaneDamageCNN.py: YOLO nano CNN classifier implemented from scratch in PyTorch (Carson Fouts)
+   - Ran HurricaneDamagePreprocessing.py to generate hurricane_train/val/test_labels.csv (Carson Fouts)
 
 Tasks In Progress (4/27/2026 - 5/3/2026):
     - Fix the data leak in RunoffLSTM.py (Josh Dula)
@@ -89,5 +94,7 @@ Tasks In Progress (4/27/2026 - 5/3/2026):
         - Make the lookback window respect the actual forecast issue time
         - Double-check the train/test split while we're in there
     - Retrain and rebuild the plots after the fix
-    - Write up the results (include what we learned from the leak) (Josh Dula)
-    - Pytorch CNN for hurricane damage (Carson Fouts)
+    - Write up the results (include what we learned from the leak (Josh Dula)
+    - Run training and evaluate on test set with confusion matrix (Carson Fouts)
+    - Ensure env is working properly and add steps to using the CNN (Carson Fouts)
+    

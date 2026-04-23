@@ -55,14 +55,17 @@ Week of 4/20/2026 - 4/26/2026
 Authors:
     - Josh Dula
     - Carson Fouts
+    - Quinn Lautenslager
 
 Tasks Completed:
-    - Built LSTM training loop in RunoffLSTM.py (Phase 3) (Josh Dula)
+    - Built LSTM training loop in RunoffLSTM.py (Phase 3) (Josh Dula, Quinn Lautenslager)
         - Adam optimizer + MSELoss on scaled residuals (Han & Morrison 2022; Kratzert et al. 2018)
         - ReduceLROnPlateau scheduler (factor=0.5, patience=3) tied to val loss
         - Gradient clipping (max_norm=1.0) for stacked-LSTM stability (Kratzert et al. 2018 §3.2)
         - Early stopping (patience=10), best weights saved to lstm_runoff.pt
         - History dict of train/val loss + LR per epoch
+        - In a separate branch tried another implementation to see if there could be any improvements
+        - Graphed training history with training vs. validation plotted
     - Built test-set evaluation in RunoffLSTM.py (Phase 4) (Josh Dula)
         - Reload best checkpoint, predict residuals, inverse-transform to cfs
         - Corrected forecast = raw_nwm - predicted_residual
@@ -83,13 +86,13 @@ Tasks Completed:
           streamflow from the hour before the prediction time, even for long-lead forecasts
           where that observation wouldn't actually be available yet
         - Deleted the saved model and plots so we don't accidentally use them in the writeup
-    
+        - In secondary branch tried to find and fix data leak but got similar results
    - Built HurricaneDamageDataset.py: custom PyTorch Dataset loading MASK images with Label_1 as ground truth (Carson Fouts)
    - Built HurricaneDamageCNN.py: YOLO nano CNN classifier implemented from scratch in PyTorch (Carson Fouts)
    - Ran HurricaneDamagePreprocessing.py to generate hurricane_train/val/test_labels.csv (Carson Fouts)
 
 Tasks In Progress (4/27/2026 - 5/3/2026):
-    - Fix the data leak in RunoffLSTM.py (Josh Dula)
+    - Fix the data leak in RunoffLSTM.py (Josh Dula, Quinn Lautenslager)
         - Take `residual` out of the feature list
         - Make the lookback window respect the actual forecast issue time
         - Double-check the train/test split while we're in there

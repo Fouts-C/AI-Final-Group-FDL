@@ -56,8 +56,17 @@ SEED        = 42
 OUT_DIR     = "pics"
 MODEL_PATH  = "lstm_runoff.pt"
 
+# `residual` is the TARGET only — never a feature. Including it in the lookback
+# leaks observations from after the forecast issue time t-L: at sequence position
+# t-k, residual = obs(t-k) - nwm(t-k), and obs(t-k) for k < L is not yet known
+# at issue time t-L.
+#
+# `obs_at_issue` is the USGS observation at the forecast's issue time
+# (model_initialization_time = t-L). That is legitimately known when the
+# forecast is made and gives the model a real-time conditions signal without
+# leaking any post-issue-time observations.
 FEAT_COLS = [
-    "nwm_forecast", "residual", "lead_time_hrs",
+    "nwm_forecast", "obs_at_issue", "lead_time_hrs",
     "hour_sin", "hour_cos", "doy_sin", "doy_cos",
 ]
 N_FEATURES = len(FEAT_COLS)
@@ -100,9 +109,16 @@ train_raw = add_temporal(train_raw)
 test_raw  = add_temporal(test_raw)
 
 
-# 1.3  Fit scalers on training data only
-feat_scaler = StandardScaler().fit(train_raw[FEAT_COLS])
-tgt_scaler  = StandardScaler().fit(train_raw[["residual"]])
+# 1.3  Determine train/val cutoff (last VAL_FRAC of training period -> val)
+train_max = train_raw["model_output_valid_time"].max()
+train_min = train_raw["model_output_valid_time"].min()
+val_cutoff = train_max - (train_max - train_min) * VAL_FRAC
+train_only_mask = train_raw["model_output_valid_time"].values <= val_cutoff
+
+# 1.4  Fit scalers on train-only rows (exclude val to avoid leaking val
+# statistics into feature normalization or target scaling).
+feat_scaler = StandardScaler().fit(train_raw.loc[train_only_mask, FEAT_COLS])
+tgt_scaler  = StandardScaler().fit(train_raw.loc[train_only_mask, ["residual"]])
 
 train_sc = train_raw.copy()
 test_sc  = test_raw.copy()
@@ -110,15 +126,11 @@ train_sc[FEAT_COLS] = feat_scaler.transform(train_raw[FEAT_COLS])
 test_sc[FEAT_COLS]  = feat_scaler.transform(test_raw[FEAT_COLS])
 
 
-#  1.4  Concatenate & assign split labels
+#  1.5  Concatenate & assign split labels
 full_sc  = pd.concat([train_sc, test_sc], ignore_index=True)
 full_raw = pd.concat([train_raw, test_raw], ignore_index=True)
 
 n_train = len(train_sc)
-train_max = train_raw["model_output_valid_time"].max()
-train_min = train_raw["model_output_valid_time"].min()
-val_cutoff = train_max - (train_max - train_min) * VAL_FRAC
-
 is_orig_train = np.arange(len(full_sc)) < n_train
 is_after_cutoff = full_raw["model_output_valid_time"].values > val_cutoff
 
@@ -130,7 +142,7 @@ full_sc["_split"] = split_labels
 for s in ("train", "val", "test"):
     print(f"  {s:5s}: {(split_labels == s).sum():>8,} rows")
 
-# 1.5  Build sliding-window sequences
+# 1.6  Build sliding-window sequences
 def build_sequences(sc_df, raw_df, lookback):
     Xs = {s: [] for s in ("train", "val", "test")}
     ys = {s: [] for s in ("train", "val", "test")}

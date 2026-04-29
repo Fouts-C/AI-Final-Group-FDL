@@ -91,13 +91,50 @@ Tasks Completed:
    - Built HurricaneDamageCNN.py: YOLO nano CNN classifier implemented from scratch in PyTorch (Carson Fouts)
    - Ran HurricaneDamagePreprocessing.py to generate hurricane_train/val/test_labels.csv (Carson Fouts)
 
-Tasks In Progress (4/27/2026 - 5/3/2026):
-    - Fix the data leak in RunoffLSTM.py (Josh Dula, Quinn Lautenslager)
-        - Take `residual` out of the feature list
-        - Make the lookback window respect the actual forecast issue time
-        - Double-check the train/test split while we're in there
-    - Retrain and rebuild the plots after the fix
-    - Write up the results (include what we learned from the leak (Josh Dula)
+Week of 4/27/2026 - 5/3/2026
+Authors:
+    - Josh Dula
+
+Tasks Completed:
+    - Fixed data leak in RunoffLSTM.py (Josh Dula)
+        - Removed `residual` from FEAT_COLS — at lookback position t-k it required
+          obs(t-k), but for a forecast with lead L issued at t-L, observations from
+          t-L+1 through t-1 are not yet available, so including them leaked
+          observations from after the forecast issue time
+        - Moved scaler fitting before the train/val temporal split so feat_scaler
+          and tgt_scaler are fit on train-only rows (excluding val period); prior
+          version fit on the full train_val.csv which leaked val statistics into
+          feature normalization
+        - Smoking-gun symptom (errors flat across all 18 lead times) is now gone
+          — corrected RMSE grows monotonically with lead time as it physically
+          should at the wet station
+    - Added obs_at_issue feature (Josh Dula)
+        - USGS observation at the forecast issue time (model_initialization_time);
+          legitimately known when the forecast is made, so no leak
+        - Updated RunoffPreprocessing.ipynb merge cell to derive obs_at_issue
+          via a second join on (streamID, model_initialization_time)
+        - Regenerated data/processed/{train_val,test,merged_all}.csv with the
+          new column; 5,029 train rows dropped where issue time predates USGS
+          coverage (test data fully covered)
+        - Without this feature the leak-free model could only learn fixed bias
+          corrections per (station, lead, time-of-year) and was worse than raw
+          NWM at the wet station; obs_at_issue gives it the current-state signal
+    - Retrained LSTM and rebuilt plots (Josh Dula)
+        - 7 features (added obs_at_issue), 54,081 params, ~9 min on CPU
+        - Best val MSE 0.0044 at epoch 7, early-stopped at epoch 17
+        - Station 11266500 (wet): NSE 0.814 -> 0.892, RMSE 7.30 -> 5.56 cfs
+          (24% reduction); correction gap widens with lead (1h: -0.13 cfs vs
+          18h: +2.81 cfs RMSE improvement) — value-add largest where NWM is
+          weakest, which is the right shape for forecast post-processing
+        - Station 09520500 (dry): raw NWM is wildly biased at this near-zero
+          gauge (RMSE grows 8 -> 97 cfs across leads); corrected RMSE stays in
+          1.8 - 3.0 cfs across all 18 leads. The huge negative NSE values are
+          artifacts of dividing by tiny observed variance, not bad predictions
+        - Refreshed pics/loss_curves.png, rmse_by_lead.png, timeseries.png,
+          scatter.png and pics/metrics_overall.csv, pics/metrics_per_lead.csv
+
+Tasks In Progress (5/4/2026 - 5/10/2026):
+    - Write up results and the lessons learned from the leak (Josh Dula)
     - Run training and evaluate on test set with confusion matrix (Carson Fouts)
     - Ensure env is working properly and add steps to using the CNN (Carson Fouts)
-    
+

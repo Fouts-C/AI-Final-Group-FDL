@@ -83,7 +83,7 @@ if __name__ == "__main__":
     processed_directory = project_root / 'data' / 'processed'
     processed_directory.mkdir(parents=True, exist_ok=True)
     
-    print("Parsing JSON files and verifying image integrity...")
+    print("Preprocessing Hurricane Damage Data:")
     df_labels = parse_hurricane_data(json_directory, mask_directory)
     print(f"Total raw records parsed: {len(df_labels)}")
     
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     print(f"Total clean records remaining: {len(df_labels)}")
     
     # 4. Stratified Train/Val/Test Split (70% / 15% / 15%)
-    print("\nPerforming stratified train/val/test split (70/15/15)...")
+    print("\nTrain/val/test split (70/15/15)...")
     
     # First split: 70% Train, 30% Temp (Val + Test)
     train_df, temp_df = train_test_split(

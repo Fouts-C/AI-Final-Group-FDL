@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from HurricaneDamageDataset import get_dataloaders
 
@@ -48,7 +52,7 @@ class C2f(nn.Module):
 
 
 class SPPF(nn.Module):
-    """Spatial Pyramid Pooling"""  
+    """Spatial Pyramid Pooling"""
     def __init__(self, in_ch, out_ch, k=5):
         super().__init__()
         mid       = in_ch // 2
@@ -73,15 +77,15 @@ class YOLONanoClassifier(nn.Module):
         self.stem   = ConvBlock(3,   16,  3, 2)
         self.stage1 = nn.Sequential(ConvBlock(16,  32,  3, 2), C2f(32,  32,  1))
         self.stage2 = nn.Sequential(ConvBlock(32,  64,  3, 2), C2f(64,  64,  2))
-        self.stage3 = nn.Sequential(ConvBlock(64,  128, 3, 2), C2f(128, 128, 2)) 
+        self.stage3 = nn.Sequential(ConvBlock(64,  128, 3, 2), C2f(128, 128, 2))
         self.stage4 = nn.Sequential(
             ConvBlock(128, 256, 3, 2),
             C2f(256, 256, 1),
-            SPPF(256, 256), 
+            SPPF(256, 256),
         )
         self.head = nn.Sequential(
-            ConvBlock(256, 1280, 1), 
-            nn.AdaptiveAvgPool2d(1),         
+            ConvBlock(256, 1280, 1),
+            nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
             nn.Dropout(0.2),
             nn.Linear(1280, num_classes),
@@ -95,9 +99,12 @@ class YOLONanoClassifier(nn.Module):
         x = self.stage4(x)
         return self.head(x)
 
+
 # Training loop
-def train_model(model, dataloaders, criterion, optimizer, scheduler, device, num_epochs=10):
+def train_model(model, dataloaders, criterion, optimizer, scheduler, device,
+                num_epochs=100, save_path=None):
     best_val_acc = 0.0
+    history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
 
     for epoch in range(num_epochs):
         print(f"\n--- Epoch {epoch+1}/{num_epochs} ---")
@@ -128,16 +135,81 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device, num
                 running_corrects += torch.sum(preds == labels.data)
 
             epoch_loss = running_loss / len(loader.dataset)
-            epoch_acc  = running_corrects.double() / len(loader.dataset)
+            epoch_acc  = running_corrects.float() / len(loader.dataset)
             print(f"  {phase.capitalize():5s}  Loss: {epoch_loss:.4f}  Acc: {epoch_acc:.4f}")
+
+            history[f'{phase}_loss'].append(epoch_loss)
+            history[f'{phase}_acc'].append(epoch_acc.item())
 
             if phase == 'val' and epoch_acc > best_val_acc:
                 best_val_acc = epoch_acc
+                if save_path:
+                    torch.save(model.state_dict(), save_path)
+                    print(f"  ** New best model saved (val acc: {best_val_acc:.4f})")
 
         scheduler.step()
 
     print(f"\nBest Validation Accuracy: {best_val_acc:.4f}")
-    return model
+    return model, history
+
+
+def plot_training_history(history, save_dir):
+    epochs = range(1, len(history['train_loss']) + 1)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    axes[0].plot(epochs, history['train_loss'], label='Train Loss')
+    axes[0].plot(epochs, history['val_loss'],   label='Val Loss')
+    axes[0].set_title('Loss per Epoch')
+    axes[0].set_xlabel('Epoch')
+    axes[0].set_ylabel('Loss')
+    axes[0].legend()
+    axes[0].grid(True)
+
+    axes[1].plot(epochs, history['train_acc'], label='Train Accuracy')
+    axes[1].plot(epochs, history['val_acc'],   label='Val Accuracy')
+    axes[1].axhline(y=1/6, color='gray', linestyle='--', label='Random Chance (16.7%)')
+    axes[1].set_title('Accuracy per Epoch')
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('Accuracy')
+    axes[1].legend()
+    axes[1].grid(True)
+
+    plt.suptitle('YOLONanoClassifier — Hurricane Damage Training History', fontsize=13)
+    plt.tight_layout()
+    out_path = save_dir / 'training_history.png'
+    plt.savefig(out_path, dpi=150)
+    plt.show()
+    print(f"Training history plot saved to {out_path}")
+
+
+def plot_confusion_matrix(model, loader, device, class_names, save_dir):
+    model.eval()
+    all_preds  = []
+    all_labels = []
+
+    with torch.no_grad():
+        for inputs, labels in loader:
+            inputs = inputs.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.numpy())
+
+    cm = confusion_matrix(all_labels, all_preds)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    disp.plot(ax=ax, colorbar=True, cmap='Blues')
+    ax.set_title('Confusion Matrix — Test Set\n(Hurricane Damage Level 0–5)', fontsize=13)
+    plt.tight_layout()
+    out_path = save_dir / 'confusion_matrix.png'
+    plt.savefig(out_path, dpi=150)
+    plt.show()
+    print(f"Confusion matrix saved to {out_path}")
+
+    correct = np.trace(cm)
+    total   = np.sum(cm)
+    print(f"Test Accuracy: {correct}/{total} = {correct/total:.4f}")
 
 
 # Entry point
@@ -160,6 +232,7 @@ if __name__ == "__main__":
 
     print(f"\nBuilding YOLONanoClassifier with {num_classes} output classes...")
     model = YOLONanoClassifier(num_classes=num_classes).to(device)
+
     train_csv = project_root / 'data' / 'processed' / 'hurricane_train_labels.csv'
     train_counts = pd.read_csv(train_csv)['Label_1'].value_counts().sort_index()
     total = train_counts.sum()
@@ -172,10 +245,20 @@ if __name__ == "__main__":
     optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10)
 
-    trained_model = train_model(
-        model, dataloaders, criterion, optimizer, scheduler, device, num_epochs=10
+    save_dir       = project_root / 'hurricane_damage_code'
+    best_model_path = save_dir / 'yolo_nano_hurricane_best.pth'
+
+    trained_model, history = train_model(
+        model, dataloaders, criterion, optimizer, scheduler, device,
+        num_epochs=100, save_path=best_model_path
     )
 
-    model_save_path = project_root / 'hurricane_damage_code' / 'yolo_nano_hurricane.pth'
-    torch.save(trained_model.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
+    # Load best checkpoint for evaluation
+    trained_model.load_state_dict(torch.load(best_model_path, map_location=device))
+    print(f"\nLoaded best model from {best_model_path}")
+
+    # Visualizations
+    plot_training_history(history, save_dir)
+
+    class_names = [f'Level {i}' for i in range(num_classes)]
+    plot_confusion_matrix(trained_model, test_dl, device, class_names, save_dir)
